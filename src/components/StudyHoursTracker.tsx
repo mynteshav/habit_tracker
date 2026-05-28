@@ -25,14 +25,20 @@ import {
 } from 'lucide-react';
 
 export default function StudyHoursTracker() {
-  const { stats, logStudyMinutes } = useDashboard();
-
-  // Timer modes: 'pomodoro' | 'short_break' | 'long_break'
-  const [timerMode, setTimerMode] = useState<'pomodoro' | 'short_break' | 'long_break'>('pomodoro');
-  const [minutes, setMinutes] = useState(25);
-  const [seconds, setSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [pomodorosCount, setPomodorosCount] = useState(0);
+  const { 
+    stats, 
+    logStudyMinutes,
+    timerMode,
+    setTimerMode,
+    minutes,
+    seconds,
+    isTimerRunning,
+    startTimer,
+    pauseTimer,
+    resetTimer,
+    pomodorosCount,
+    setPomodorosCount
+  } = useDashboard();
 
   // Focus mode toggle (full-screen ambient view)
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -56,87 +62,25 @@ export default function StudyHoursTracker() {
     long_break: 15
   };
 
-  // Change timer mode
-  const handleModeChange = (mode: 'pomodoro' | 'short_break' | 'long_break') => {
-    setIsRunning(false);
-    setTimerMode(mode);
-    setMinutes(modeDurations[mode]);
-    setSeconds(0);
-  };
-
-  // Trigger web chime tone using raw synthetic audio oscillator (no external sound file dependencies)
-  const playChime = () => {
+  const handleToggleStart = () => {
+    // Try to trigger silent oscillator on click first to allow sound on phone/safari
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
-      const ctx = audioContextRef.current;
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
-
-      gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
-
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.8);
     } catch (e) {
-      console.warn("Audio Context chime not completed:", e);
+      console.warn("Audio Context init ignored:", e);
     }
-  };
-
-  // Timer logic
-  useEffect(() => {
-    let interval: any = null;
-    if (isRunning) {
-      interval = setInterval(() => {
-        if (seconds > 0) {
-          setSeconds(seconds - 1);
-        } else if (seconds === 0) {
-          if (minutes === 0) {
-            // Timer Finished!
-            setIsRunning(false);
-            playChime();
-            
-            if (timerMode === 'pomodoro') {
-              setPomodorosCount(prev => prev + 1);
-              // Log 25 minutes to stats!
-              logStudyMinutes(25, 1);
-              alert("🎯 Pomodoro Complete! Time to take a break.");
-              handleModeChange('short_break');
-            } else {
-              alert("☕ Break finished! Back to study.");
-              handleModeChange('pomodoro');
-            }
-          } else {
-            setMinutes(minutes - 1);
-            setSeconds(59);
-          }
-        }
-      }, 1000);
+    
+    if (isTimerRunning) {
+      pauseTimer();
     } else {
-      clearInterval(interval);
+      startTimer();
     }
-    return () => clearInterval(interval);
-  }, [isRunning, minutes, seconds, timerMode]);
-
-  const handleToggleStart = () => {
-    // Try to trigger silent oscillator on click first to allow sound on phone/safari
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    setIsRunning(!isRunning);
   };
 
   const handleReset = () => {
-    setIsRunning(false);
-    setMinutes(modeDurations[timerMode]);
-    setSeconds(0);
+    resetTimer();
   };
 
   // Manual study logging
@@ -244,7 +188,7 @@ export default function StudyHoursTracker() {
                 {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
               </span>
               <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase block mt-2">
-                Today completed: {pomodorosCount} loops
+                Today completed: {pomodorosCount} sessions
               </span>
             </div>
           </div>
@@ -254,13 +198,13 @@ export default function StudyHoursTracker() {
             <button 
               onClick={handleToggleStart}
               className={`p-4 px-8 rounded-2xl flex items-center gap-2 text-sm font-bold shadow transition cursor-pointer ${
-                isRunning 
+                isTimerRunning 
                   ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/10' 
                   : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/10'
               }`}
             >
-              {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              <span>{isRunning ? 'Hold Timer' : 'Initiate Session'}</span>
+              {isTimerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              <span>{isTimerRunning ? 'Hold Timer' : 'Initiate Session'}</span>
             </button>
             <button 
               onClick={handleReset}
@@ -316,7 +260,7 @@ export default function StudyHoursTracker() {
             <div>
               <span className="text-xs font-mono text-indigo-400 uppercase tracking-widest font-semibold font-bold">Deep Work Engine</span>
               <h2 className="text-2xl md:text-3.5xl font-extrabold tracking-tight mt-1 text-slate-100 font-sans leading-none">
-                Study Tracker & Pomodoro
+                Study & Focus Timer
               </h2>
               <p className="text-sm text-slate-400 mt-2 font-sans">
                 Build study streaks. Alternate focus bursts with spatial breaks to optimize neurotransmitters.
@@ -340,7 +284,7 @@ export default function StudyHoursTracker() {
                 {(['pomodoro', 'short_break', 'long_break'] as const).map((mode) => (
                   <button
                     key={mode}
-                    onClick={() => handleModeChange(mode)}
+                    onClick={() => setTimerMode(mode)}
                     className={`
                       flex-1 py-2.5 rounded-xl text-xs font-sans font-bold transition cursor-pointer capitalize
                       ${timerMode === mode 
@@ -349,7 +293,7 @@ export default function StudyHoursTracker() {
                       }
                     `}
                   >
-                    {mode.replace('_', ' ')}
+                    {mode === 'pomodoro' ? 'Focus Work' : mode.replace('_', ' ')}
                   </button>
                 ))}
               </div>
@@ -361,7 +305,7 @@ export default function StudyHoursTracker() {
                 </div>
                 <div className="flex items-center gap-2 text-slate-500 font-mono text-[10px] tracking-widest mt-3">
                   <Bell className="w-3.5 h-3.5 text-slate-600" />
-                  <span>ALERT CHIME STANDBY | TODAY LOGGED: {pomodorosCount} POMYS</span>
+                  <span>ALERT CHIME STANDBY | TODAY LOGGED: {pomodorosCount} SESSIONS</span>
                 </div>
               </div>
 
@@ -370,13 +314,13 @@ export default function StudyHoursTracker() {
                 <button 
                   onClick={handleToggleStart}
                   className={`p-4 px-10 rounded-2xl flex items-center gap-2 text-sm font-bold shadow cursor-pointer text-white transition font-sans ${
-                    isRunning 
+                    isTimerRunning 
                       ? 'bg-amber-600 hover:bg-amber-400 shadow-amber-600/10' 
                       : 'bg-indigo-600 hover:bg-indigo-400 shadow-indigo-600/10'
                   }`}
                 >
-                  {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                  <span>{isRunning ? 'Pause Work' : 'Begin Work Session'}</span>
+                  {isTimerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  <span>{isTimerRunning ? 'Pause Work' : 'Begin Work Session'}</span>
                 </button>
                 <button 
                   onClick={handleReset}

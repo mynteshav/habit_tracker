@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, SetStateAction } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -74,6 +74,16 @@ interface DashboardContextType {
   logStudyMinutes: (minutes: number, pomodoros?: number) => Promise<void>;
   addXp: (amount: number) => Promise<void>;
   resetApp: () => Promise<void>;
+  timerMode: 'pomodoro' | 'short_break' | 'long_break';
+  setTimerMode: (mode: 'pomodoro' | 'short_break' | 'long_break') => void;
+  minutes: number;
+  seconds: number;
+  isTimerRunning: boolean;
+  startTimer: () => void;
+  pauseTimer: () => void;
+  resetTimer: () => void;
+  pomodorosCount: number;
+  setPomodorosCount: Dispatch<SetStateAction<number>>;
 }
 
 const defaultBadges: AchievementBadge[] = [
@@ -1010,6 +1020,175 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // --- 8. Persistent Pomodoro Timer & Background Logic ---
+  const [timerMode, setTimerModeState] = useState<'pomodoro' | 'short_break' | 'long_break'>(() => {
+    const stored = localStorage.getItem('pomodoro_timer_mode');
+    return (stored as 'pomodoro' | 'short_break' | 'long_break') || 'pomodoro';
+  });
+
+  const [isTimerRunning, setIsTimerRunningState] = useState<boolean>(() => {
+    const stored = localStorage.getItem('pomodoro_timer_running');
+    return stored === 'true';
+  });
+
+  const modeDurations = {
+    pomodoro: 25,
+    short_break: 5,
+    long_break: 15
+  };
+
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    const storedMode = localStorage.getItem('pomodoro_timer_mode') || 'pomodoro';
+    const def = (modeDurations[storedMode as 'pomodoro' | 'short_break' | 'long_break'] || 25) * 60;
+    const stored = localStorage.getItem('pomodoro_timer_remaining_seconds');
+    return stored ? parseInt(stored, 10) : def;
+  });
+
+  const [expectedEndTime, setExpectedEndTime] = useState<number | null>(() => {
+    const stored = localStorage.getItem('pomodoro_timer_expected_end');
+    return stored ? parseInt(stored, 10) : null;
+  });
+
+  const [pomodorosCount, setPomodorosCount] = useState<number>(() => {
+    const stored = localStorage.getItem('pomodoros_count');
+    return stored ? parseInt(stored, 10) : 0;
+  });
+
+  const [minutes, setDisplayMinutes] = useState(25);
+  const [seconds, setDisplaySeconds] = useState(0);
+
+  const playChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+
+        gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.8);
+      }
+    } catch (e) {
+      console.warn("Audio Context chime failed:", e);
+    }
+  };
+
+  const setTimerMode = (mode: 'pomodoro' | 'short_break' | 'long_break') => {
+    setIsTimerRunningState(false);
+    setTimerModeState(mode);
+    const secs = (modeDurations[mode] || 25) * 60;
+    setRemainingSeconds(secs);
+    setExpectedEndTime(null);
+
+    localStorage.setItem('pomodoro_timer_mode', mode);
+    localStorage.setItem('pomodoro_timer_running', 'false');
+    localStorage.setItem('pomodoro_timer_remaining_seconds', String(secs));
+    localStorage.removeItem('pomodoro_timer_expected_end');
+  };
+
+  const startTimer = () => {
+    if (isTimerRunning) return;
+    
+    const exp = Date.now() + remainingSeconds * 1000;
+    setIsTimerRunningState(true);
+    setExpectedEndTime(exp);
+
+    localStorage.setItem('pomodoro_timer_running', 'true');
+    localStorage.setItem('pomodoro_timer_expected_end', String(exp));
+  };
+
+  const pauseTimer = () => {
+    if (!isTimerRunning || !expectedEndTime) return;
+
+    const left = Math.max(0, Math.round((expectedEndTime - Date.now()) / 1000));
+    setIsTimerRunningState(false);
+    setRemainingSeconds(left);
+    setExpectedEndTime(null);
+
+    localStorage.setItem('pomodoro_timer_running', 'false');
+    localStorage.setItem('pomodoro_timer_remaining_seconds', String(left));
+    localStorage.removeItem('pomodoro_timer_expected_end');
+  };
+
+  const resetTimer = () => {
+    setIsTimerRunningState(false);
+    const secs = (modeDurations[timerMode] || 25) * 60;
+    setRemainingSeconds(secs);
+    setExpectedEndTime(null);
+
+    localStorage.setItem('pomodoro_timer_running', 'false');
+    localStorage.setItem('pomodoro_timer_remaining_seconds', String(secs));
+    localStorage.removeItem('pomodoro_timer_expected_end');
+  };
+
+  useEffect(() => {
+    const updateTimer = () => {
+      if (isTimerRunning && expectedEndTime) {
+        const now = Date.now();
+        const left = Math.max(0, Math.round((expectedEndTime - now) / 1000));
+        
+        if (left <= 0) {
+          setIsTimerRunningState(false);
+          setExpectedEndTime(null);
+          
+          localStorage.setItem('pomodoro_timer_running', 'false');
+          localStorage.removeItem('pomodoro_timer_expected_end');
+          localStorage.setItem('pomodoro_timer_remaining_seconds', '0');
+
+          playChime();
+          if (timerMode === 'pomodoro') {
+            const nextCount = pomodorosCount + 1;
+            setPomodorosCount(nextCount);
+            localStorage.setItem('pomodoros_count', String(nextCount));
+            logStudyMinutes(25, 1);
+            alert("🎯 Focus Session Complete! Time to take a break.");
+            setTimerMode('short_break');
+          } else {
+            alert("☕ Break finished! Back to study.");
+            setTimerMode('pomodoro');
+          }
+        } else {
+          setDisplayMinutes(Math.floor(left / 60));
+          setDisplaySeconds(left % 60);
+          localStorage.setItem('pomodoro_timer_remaining_seconds', String(left));
+        }
+      } else {
+        setDisplayMinutes(Math.floor(remainingSeconds / 60));
+        setDisplaySeconds(remainingSeconds % 60);
+      }
+    };
+
+    updateTimer();
+
+    const interval = setInterval(updateTimer, 200);
+
+    return () => clearInterval(interval);
+  }, [isTimerRunning, expectedEndTime, remainingSeconds, timerMode, pomodorosCount]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (isTimerRunning && expectedEndTime) {
+          const now = Date.now();
+          const left = Math.max(0, Math.round((expectedEndTime - now) / 1000));
+          setDisplayMinutes(Math.floor(left / 60));
+          setDisplaySeconds(left % 60);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isTimerRunning, expectedEndTime]);
+
   const resetApp = async () => {
     // pristine starting states
     const initialStats: UserStats = {
@@ -1117,7 +1296,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       deleteFlashcard,
       logStudyMinutes,
       addXp,
-      resetApp
+      resetApp,
+      timerMode,
+      setTimerMode,
+      minutes,
+      seconds,
+      isTimerRunning,
+      startTimer,
+      pauseTimer,
+      resetTimer,
+      pomodorosCount,
+      setPomodorosCount
     }}>
       {children}
     </DashboardContext.Provider>

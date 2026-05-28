@@ -51,7 +51,7 @@ interface SidebarProps {
 const navItems = [
   { id: 'home' as TabId, label: 'Dashboard Home', icon: LayoutDashboard },
   { id: 'topics' as TabId, label: 'Today Topics', icon: CheckSquare },
-  { id: 'timer' as TabId, label: 'Focus & Pomodoro', icon: Clock },
+  { id: 'timer' as TabId, label: 'Focus Timer', icon: Clock },
   { id: 'coding' as TabId, label: 'DSA Practice', icon: Code },
   { id: 'projects' as TabId, label: 'Projects Lane', icon: FolderGit },
   { id: 'timetable' as TabId, label: 'Timetable Week', icon: Calendar },
