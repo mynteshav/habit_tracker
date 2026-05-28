@@ -1,0 +1,6 @@
+{
+  "name": "AI Study & Productivity Dashboard",
+  "description": "A comprehensive study, habit, and coding practice tracking dashboard with an AI performance assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

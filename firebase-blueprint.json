@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "UserStats": {
+      "title": "UserStats",
+      "description": "User profile stats, streak, badges and sessions.",
+      "type": "object",
+      "properties": {
+        "level": { "type": "integer", "description": "The current learning level of the user" },
+        "xp": { "type": "integer", "description": "The experience points of the user" },
+        "streakDays": { "type": "integer", "description": "Continuous days of study activity" },
+        "lastActiveDate": { "type": "string", "format": "date", "description": "The last UTC date when activity was registered" },
+        "badges": { "type": "array", "description": "List of unlocked badges" },
+        "sessions": { "type": "array", "description": "List of all study sessions" }
+      },
+      "required": ["level", "xp", "streakDays", "lastActiveDate", "badges", "sessions"]
+    },
+    "Topic": {
+      "title": "Topic",
+      "description": "A study topic description and status tracker.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+        "deadline": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "order": { "type": "integer" }
+      },
+      "required": ["title", "subject", "priority", "deadline", "completed", "notes", "order"]
+    },
+    "CodingProblem": {
+      "title": "CodingProblem",
+      "description": "A programming problem record from platforms like LeetCode.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "platform": { "type": "string", "enum": ["LeetCode", "GeeksforGeeks", "CodeStudio", "Other"] },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "topic": { "type": "string" },
+        "notes": { "type": "string" },
+        "solvedAt": { "type": "string" },
+        "revisionMarked": { "type": "boolean" }
+      },
+      "required": ["title", "platform", "difficulty", "topic", "notes", "solvedAt", "revisionMarked"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A project board with subtasks.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "technologies": { "type": "array" },
+        "deadline": { "type": "string" },
+        "status": { "type": "string", "enum": ["Planned", "In Progress", "Completed"] },
+        "progress": { "type": "integer" },
+        "githubLink": { "type": "string" },
+        "demoLink": { "type": "string" },
+        "subtasks": { "type": "array" }
+      },
+      "required": ["name", "description", "technologies", "deadline", "status", "progress", "subtasks"]
+    },
+    "TimetableSlot": {
+      "title": "TimetableSlot",
+      "description": "Weekly recurrent study and coding schedule calendar slots.",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["day", "startTime", "endTime", "subject", "color"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A habit tracker with frequency and completion history.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly"] },
+        "history": { "type": "object" }
+      },
+      "required": ["name", "description", "createdAt", "frequency", "history"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A study note with custom content and flashcard lists.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "content": { "type": "string" },
+        "bookmarked": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "revisionDue": { "type": "string" },
+        "flashcards": { "type": "array" }
+      },
+      "required": ["title", "subject", "content", "bookmarked", "createdAt"]
+    },
+    "Flashcard": {
+      "title": "Flashcard",
+      "description": "A single spaced-repetition card.",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "easeFactor": { "type": "number" },
+        "intervalDays": { "type": "integer" },
+        "reviewsCount": { "type": "integer" },
+        "nextReviewAt": { "type": "string" }
+      },
+      "required": ["category", "question", "answer", "easeFactor", "intervalDays", "reviewsCount", "nextReviewAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserStats",
+      "description": "User summary statistics profile."
+    },
+    "/users/{userId}/topics/{topicId}": {
+      "schema": "Topic",
+      "description": "Study topics belonging to a user."
+    },
+    "/users/{userId}/problems/{problemId}": {
+      "schema": "CodingProblem",
+      "description": "Coding practice records belonging to a user."
+    },
+    "/users/{userId}/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Building and learning projects board for a user."
+    },
+    "/users/{userId}/timetable/{slotId}": {
+      "schema": "TimetableSlot",
+      "description": "Study schedule planner slots for a user."
+    },
+    "/users/{userId}/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Habit tracker instances belonging to a user."
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": "Note",
+      "description": "Personalized MD revision notes for a user."
+    },
+    "/users/{userId}/flashcards/{flashcardId}": {
+      "schema": "Flashcard",
+      "description": "Active recall cards database."
+    }
+  }
+}

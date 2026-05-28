@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Master Catch-all Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidTopic(data) {
+      return data.title is string && data.title.size() <= 200
+        && data.subject is string && data.subject.size() <= 100
+        && data.priority in ['high', 'medium', 'low']
+        && data.deadline is string && data.deadline.size() <= 50
+        && data.completed is bool
+        && data.notes is string && data.notes.size() <= 5000
+        && data.order is int;
+    }
+
+    function isValidProblem(data) {
+      return data.title is string && data.title.size() <= 200
+        && data.platform in ['LeetCode', 'GeeksforGeeks', 'CodeStudio', 'Other']
+        && data.difficulty in ['easy', 'medium', 'hard']
+        && data.topic is string && data.topic.size() <= 100
+        && data.notes is string && data.notes.size() <= 5000
+        && data.solvedAt is string && data.solvedAt.size() <= 20
+        && data.revisionMarked is bool;
+    }
+
+    function isValidProject(data) {
+      return data.name is string && data.name.size() <= 200
+        && data.description is string && data.description.size() <= 2000
+        && data.technologies is list && data.technologies.size() <= 50
+        && data.deadline is string && data.deadline.size() <= 50
+        && data.status in ['Planned', 'In Progress', 'Completed']
+        && data.progress is int && data.progress >= 0 && data.progress <= 100
+        && data.subtasks is list && data.subtasks.size() <= 100;
+    }
+
+    function isValidTimetableSlot(data) {
+      return data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        && data.startTime is string && data.startTime.matches('^[0-9]{2}:[0-9]{2}$')
+        && data.endTime is string && data.endTime.matches('^[0-9]{2}:[0-9]{2}$')
+        && data.subject is string && data.subject.size() <= 100
+        && (data.description == null || (data.description is string && data.description.size() <= 1000))
+        && data.color is string && data.color.size() <= 20;
+    }
+
+    // Habits history values are booleans with date keys
+    function isValidHabit(data) {
+      return data.name is string && data.name.size() <= 200
+        && data.description is string && data.description.size() <= 1000
+        && data.createdAt is string && data.createdAt.size() <= 20
+        && data.frequency in ['daily', 'weekly']
+        && data.history is map && data.history.size() <= 1000;
+    }
+
+    function isValidNote(data) {
+      return data.title is string && data.title.size() <= 200
+        && data.subject is string && data.subject.size() <= 100
+        && data.content is string && data.content.size() <= 50000
+        && data.bookmarked is bool
+        && data.createdAt is string && data.createdAt.size() <= 50
+        && (data.revisionDue == null || (data.revisionDue is string && data.revisionDue.size() <= 20));
+    }
+
+    function isValidFlashcard(data) {
+      return data.category is string && data.category.size() <= 100
+        && data.question is string && data.question.size() <= 1000
+        && data.answer is string && data.answer.size() <= 2000
+        && data.easeFactor is number
+        && data.intervalDays is int
+        && data.reviewsCount is int
+        && data.nextReviewAt is string && data.nextReviewAt.size() <= 20;
+    }
+
+    function isValidUserStats(data) {
+      return data.level is int && data.level >= 1
+        && data.xp is int && data.xp >= 0
+        && data.streakDays is int && data.streakDays >= 0
+        && data.lastActiveDate is string && data.lastActiveDate.size() <= 20
+        && data.badges is list && data.badges.size() <= 50
+        && data.sessions is list && data.sessions.size() <= 5000;
+    }
+
+    // --- Users Path Matching ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserStats(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserStats(incoming());
+      allow delete: if false; // Users cannot be completely deleted from the frontend to preserve stats consistency
+
+      // Subcollection inside UserStats
+      match /topics/{topicId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(topicId) && isValidTopic(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(topicId);
+      }
+
+      match /problems/{problemId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(problemId) && isValidProblem(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(problemId);
+      }
+
+      match /projects/{projectId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(projectId) && isValidProject(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(projectId);
+      }
+
+      match /timetable/{slotId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(slotId) && isValidTimetableSlot(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(slotId);
+      }
+
+      match /habits/{habitId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(habitId) && isValidHabit(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(habitId);
+      }
+
+      match /notes/{noteId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(noteId) && isValidNote(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(noteId);
+      }
+
+      match /flashcards/{flashcardId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(flashcardId) && isValidFlashcard(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(flashcardId);
+      }
+    }
+  }
+}

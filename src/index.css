@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+@theme {
+  --color-slate-50: var(--slate-50);
+  --color-slate-100: var(--slate-100);
+  --color-slate-200: var(--slate-200);
+  --color-slate-300: var(--slate-300);
+  --color-slate-400: var(--slate-400);
+  --color-slate-500: var(--slate-500);
+  --color-slate-600: var(--slate-600);
+  --color-slate-700: var(--slate-700);
+  --color-slate-800: var(--slate-800);
+  --color-slate-900: var(--slate-900);
+  --color-slate-950: var(--slate-950);
+}
+
+:root {
+  /* Default: Dark Theme */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+}
+
+:root.light {
+  /* Elegant Light Theme Overrides */
+  --slate-50: #020617;
+  --slate-100: #0f172a;
+  --slate-200: #1e293b;
+  --slate-300: #334155;
+  --slate-400: #475569;
+  --slate-500: #64748b;
+  --slate-600: #94a3b8;
+  --slate-700: #cbd5e1;
+  --slate-800: #e2e8f0;
+  --slate-900: #ffffff;
+  --slate-950: #f8fafc;
+}
+
+/* Supplemental rules for direct Hex classes to support Light Theme */
+:root.light {
+  color-scheme: light;
+  background-color: #f8fafc;
+}
+
+:root.light body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* Hex overrides for components that use bg-[#0c1020] or similar */
+:root.light [class*="bg-[#0c1020]"],
+:root.light [class*="bg-[#0f172a]"],
+:root.light [class*="bg-[#05050f]"],
+:root.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+:root.light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
+}
+
+/* Text readability enhancements in Light Mode */
+:root.light [class*="text-slate-300"] {
+  color: #1e293b !important;
+}
+:root.light [class*="text-slate-100"] {
+  color: #0f172a !important;
+}
+:root.light [class*="text-white"] {
+  color: #000000 !important;
+}
+:root.light [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+:root.light [class*="text-slate-200"] {
+  color: #1e293b !important;
+}
+:root.light [class*="text-slate-500"] {
+  color: #64748b !important;
+}
+
+/* Card layout borders */
+:root.light [class*="border-slate-800"],
+:root.light [class*="border-slate-900"],
+:root.light [class*="border-slate-700"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Handle inputs, select widgets, form controls in light mode */
+:root.light input,
+:root.light select,
+:root.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Ensure focus highlights or interactive tabs stand out */
+:root.light [class*="bg-slate-800/50"],
+:root.light [class*="bg-slate-900/50"] {
+  background-color: #f1f5f9 !important;
+}
+
+:root.light [class*="text-indigo-400"],
+:root.light [class*="text-indigo-300"] {
+  color: #4f46e5 !important;
+}
+
+:root.light [class*="bg-indigo-500/5"],
+:root.light [class*="bg-indigo-500/10"] {
+  background-color: rgba(79, 70, 229, 0.08) !important;
+}
+
+/* Keep selected tabs text look clean and dark */
+:root.light .text-indigo-400 {
+  color: #4f46e5 !important;
+}
+
+/* Success notifications, metrics or tags */
+:root.light [class*="text-emerald-400"] {
+  color: #059669 !important;
+}
+:root.light [class*="bg-emerald-500/15"] {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+/* Modal layers */
+:root.light .bg-slate-900\/95,
+:root.light .bg-slate-950\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px);
+}
