@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { 
   Plus, 
@@ -29,11 +29,13 @@ export default function TodayTopics() {
     updateTopic, 
     deleteTopic, 
     completeTopic, 
-    reorderTopics 
+    reorderTopics,
+    showToast,
+    checkExpiredTopics
   } = useDashboard();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed' | 'expired'>('active');
   const [isAdding, setIsAdding] = useState(false);
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
 
@@ -44,20 +46,60 @@ export default function TodayTopics() {
   const [deadline, setDeadline] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Expiry mode choice
+  const [autoDeleteExpired, setAutoDeleteExpired] = useState(() => {
+    return localStorage.getItem('auto_delete_expired_topics') === 'true';
+  });
+
+  const toggleAutoDeleteExpired = () => {
+    const nextValue = !autoDeleteExpired;
+    setAutoDeleteExpired(nextValue);
+    localStorage.setItem('auto_delete_expired_topics', String(nextValue));
+    showToast(`Expired topics will now be ${nextValue ? 'automatically deleted' : 'moved to Expired tasks list'}.`, 'info');
+    setTimeout(() => {
+      checkExpiredTopics();
+    }, 500);
+  };
+
+  // Date calculation
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  // Run the check when the page mounts
+  useEffect(() => {
+    checkExpiredTopics();
+  }, []);
+
   // Search and Filter logic
   const filteredTopics = topics
     .filter((t) => {
       const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             t.subject.toLowerCase().includes(searchQuery.toLowerCase());
-      if (filterStatus === 'all') return matchesSearch;
-      if (filterStatus === 'completed') return matchesSearch && t.completed;
-      return matchesSearch && !t.completed;
+      if (!matchesSearch) return false;
+
+      const isExpired = !t.completed && t.deadline && t.deadline < todayStr;
+      
+      if (filterStatus === 'all') return true;
+      if (filterStatus === 'completed') return t.completed;
+      if (filterStatus === 'expired') return isExpired;
+      if (filterStatus === 'active') return !t.completed && !isExpired;
+      return true;
     })
     .sort((a, b) => a.order - b.order);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !subject.trim()) return;
+    if (!title.trim()) {
+      showToast("❌ Topic title cannot be empty!", "error");
+      return;
+    }
+    if (!subject.trim()) {
+      showToast("❌ Subject / Category cannot be empty!", "error");
+      return;
+    }
 
     if (editingTopicId) {
       updateTopic(editingTopicId, {
@@ -67,6 +109,7 @@ export default function TodayTopics() {
         deadline,
         notes
       });
+      showToast("✏️ Topic updated successfully!", "success");
       setEditingTopicId(null);
     } else {
       addTopic({
@@ -243,27 +286,48 @@ export default function TodayTopics() {
         </div>
 
         {/* Right filter choices */}
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-          <Filter className="w-3.5 h-3.5 text-slate-500" />
-          {[
-            { id: 'all', label: 'All Subjects' },
-            { id: 'pending', label: 'Pending Only' },
-            { id: 'completed', label: 'Completed' }
-          ].map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setFilterStatus(opt.id as any)}
-              className={`
-                px-3.5 py-1.5 rounded-lg text-xs font-sans font-medium transition cursor-pointer shrink-0 border
-                ${filterStatus === opt.id 
-                  ? 'bg-indigo-505/10 border-indigo-500/30 text-indigo-400 bg-indigo-500/10' 
-                  : 'border-slate-900 text-slate-400 hover:text-white hover:bg-slate-950/40'
-                }
-              `}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <Filter className="w-3.5 h-3.5 text-slate-500" />
+            {[
+              { id: 'all', label: 'All Topics' },
+              { id: 'active', label: 'Active' },
+              { id: 'completed', label: 'Completed' },
+              { id: 'expired', label: 'Expired' }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setFilterStatus(opt.id as any)}
+                className={`
+                  px-3 py-1.5 rounded-lg text-xs font-sans font-medium transition cursor-pointer shrink-0 border
+                  ${filterStatus === opt.id 
+                    ? 'border-indigo-500/35 text-indigo-400 bg-indigo-500/10' 
+                    : 'border-slate-900 text-slate-400 hover:text-white hover:bg-slate-950/40'
+                  }
+                `}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="h-4 w-px bg-slate-800 hidden md:block" />
+
+          {/* Expiry Mode Switcher */}
+          <button
+            onClick={toggleAutoDeleteExpired}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono transition border cursor-pointer shrink-0 ${
+              autoDeleteExpired 
+                ? 'bg-rose-950/40 border-rose-500/25 text-rose-400 hover:bg-rose-950/60' 
+                : 'bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:bg-slate-950/60'
+            }`}
+            title="Toggle whether expired topics are automatically deleted or kept in Expired topics section"
+          >
+            <span>⏳ Expiry Mode:</span>
+            <span className="font-bold uppercase tracking-wider">
+              {autoDeleteExpired ? 'Auto-Delete' : 'Move to Expired'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -382,6 +446,70 @@ export default function TodayTopics() {
           })
         )}
       </div>
+
+      {/* Expired Tasks Section */}
+      {!autoDeleteExpired && topics.filter(t => !t.completed && t.deadline && t.deadline < todayStr).length > 0 && (
+        <div className="p-6 bg-rose-500/5 border border-rose-500/15 rounded-2xl space-y-4 shadow-sm animate-slideUp mt-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-rose-400 font-mono text-xs font-bold uppercase tracking-wider">
+                <AlertCircle className="w-4 h-4" />
+                <span>Expired Tasks & Topics ({topics.filter(t => !t.completed && t.deadline && t.deadline < todayStr).length})</span>
+              </div>
+              <p className="text-xs text-slate-400 font-sans">
+                These topics passed their deadlines without completion. Please reschedule, delete, or finish them!
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-2 max-h-[220px] overflow-y-auto pr-2 scrollbar-thin">
+            {topics.filter(t => !t.completed && t.deadline && t.deadline < todayStr).map((item) => (
+              <div 
+                key={item.id}
+                className="p-4 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center justify-between gap-3 relative overflow-hidden"
+              >
+                <div className="absolute left-0 inset-y-0 w-1 bg-rose-500" />
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => completeTopic(item.id)}
+                    className="w-5 h-5 rounded border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold hover:bg-rose-500/20 cursor-pointer"
+                    title="Mark Completed"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-200">{item.title}</h5>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-mono uppercase bg-rose-500/10 text-rose-400 px-1 py-0.5 rounded border border-rose-500/20">
+                        {item.subject}
+                      </span>
+                      <span className="text-[9px] text-rose-400 font-mono">
+                        📅 Due: {item.deadline} (Expired)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="p-1.5 border border-slate-900 bg-slate-950/30 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                    title="Reschedule / Edit"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteTopic(item.id)}
+                    className="p-1.5 border border-slate-900 bg-slate-950/30 text-slate-500 hover:text-rose-400 rounded-lg transition cursor-pointer"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

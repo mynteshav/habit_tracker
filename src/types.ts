@@ -46,7 +46,7 @@ export interface Project {
 
 export interface TimetableSlot {
   id: string;
-  day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday' | 'All Days';
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   subject: string;

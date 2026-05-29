@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { 
   Send, 
@@ -14,7 +14,8 @@ import {
   Info, 
   HelpCircle,
   Clock,
-  Code
+  Code,
+  Trash2
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
@@ -24,12 +25,36 @@ interface ChatMessage {
 }
 
 export default function AiAssistant() {
-  const { topics, problems, stats } = useDashboard();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { sender: 'coach', text: "Welcome, Scholar! I'm your deep learning & algorithms coach. I possess context on today's scheduled subjects, solved DSA problems, and your stream habits. Ask me to formulate a study plan, explain complex algorithmic constraints, or debug an architecture loop." }
-  ]);
+  const { topics, problems, stats, projects, showToast } = useDashboard();
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('study_assistant_messages');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse saved chat messages:", e);
+      }
+    }
+    return [
+      { sender: 'coach', text: "Welcome, Scholar! I'm your deep learning & algorithms coach. I possess context on today's scheduled subjects, solved DSA problems, and your stream habits. Ask me to formulate a study plan, explain complex algorithmic constraints, or debug an architecture loop." }
+    ];
+  });
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Save conversation history to local storage
+  useEffect(() => {
+    localStorage.setItem('study_assistant_messages', JSON.stringify(messages));
+  }, [messages]);
+
+  const clearChatHistory = () => {
+    const defaultMsg: ChatMessage[] = [
+      { sender: 'coach', text: "Welcome, Scholar! I'm your deep learning & algorithms coach. I possess context on today's scheduled subjects, solved DSA problems, and your stream habits. Ask me to formulate a study plan, explain complex algorithmic constraints, or debug an architecture loop." }
+    ];
+    setMessages(defaultMsg);
+    localStorage.setItem('study_assistant_messages', JSON.stringify(defaultMsg));
+    showToast("🧹 Conversation history cleared.", "info");
+  };
 
   // Quick Action triggers
   const executePreset = async (promptText: string) => {
@@ -44,24 +69,26 @@ export default function AiAssistant() {
         body: JSON.stringify({
           mode: 'chat',
           message: promptText,
-          // Supply contextual metrics for grounding
-          context: {
-            unlockedBadgesCount: stats.badges.filter(b => b.unlocked).length,
-            topicsCount: topics.length,
-            solvedCount: problems.length,
-            streak: stats.streakDays
-          }
+          topics,
+          problemStats: problems,
+          studySessions: stats.sessions,
+          projects
         })
       });
 
       if (!resp.ok) {
-        throw new Error("Failed to contact the coaching API. Make sure the server script is active.");
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${resp.status}`);
       }
 
       const data = await resp.json();
+      if (!data || !data.response || !data.response.trim()) {
+        throw new Error("Received an empty response from the Coach API.");
+      }
       setMessages(prev => [...prev, { sender: 'coach', text: data.response }]);
     } catch (err: any) {
-      console.error(err);
+      console.error("Coach API Error:", err);
+      showToast(`🤖 AI Assistant: ${err.message}`, 'error');
       setMessages(prev => [...prev, { sender: 'coach', text: `⚠️ Error contacting Coach Engine: ${err.message}. Please verify server run statuses.` }]);
     } finally {
       setLoading(false);
@@ -84,20 +111,26 @@ export default function AiAssistant() {
         body: JSON.stringify({
           mode: 'chat',
           message: userMsg,
-          context: {
-            topicsCount: topics.length,
-            solvedCount: problems.length,
-            streak: stats.streakDays
-          }
+          topics,
+          problemStats: problems,
+          studySessions: stats.sessions,
+          projects
         })
       });
 
-      if (!resp.ok) throw new Error("Connection proxy failed.");
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${resp.status}`);
+      }
 
       const data = await resp.json();
+      if (!data || !data.response || !data.response.trim()) {
+        throw new Error("Received an empty response from the Coach API.");
+      }
       setMessages(prev => [...prev, { sender: 'coach', text: data.response }]);
     } catch (err: any) {
-      console.error(err);
+      console.error("Coach API Error:", err);
+      showToast(`🤖 AI Assistant: ${err.message}`, 'error');
       setMessages(prev => [...prev, { sender: 'coach', text: `⚠️ Offline error: ${err.message}` }]);
     } finally {
       setLoading(false);
@@ -107,14 +140,23 @@ export default function AiAssistant() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto p-4 md:p-8 text-white min-h-screen">
       {/* Header section */}
-      <div>
-        <span className="text-xs font-mono text-indigo-400 uppercase tracking-widest font-semibold font-bold">Instruction Coach</span>
-        <h2 className="text-2xl md:text-3.5xl font-extrabold tracking-tight mt-1 text-slate-100 font-sans leading-none">
-          AI Professional Coach
-        </h2>
-        <p className="text-sm text-slate-400 mt-2 font-sans">
-          Ground queries regarding dynamic programming bounds, project timelines, or deep learning parameters instantly.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <span className="text-xs font-mono text-indigo-400 uppercase tracking-widest font-semibold font-bold">Instruction Coach</span>
+          <h2 className="text-2xl md:text-3.5xl font-extrabold tracking-tight mt-1 text-slate-100 font-sans leading-none">
+            AI Professional Coach
+          </h2>
+          <p className="text-sm text-slate-400 mt-2 font-sans">
+            Ground queries regarding dynamic programming bounds, project timelines, or deep learning parameters instantly.
+          </p>
+        </div>
+        <button
+          onClick={clearChatHistory}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 text-rose-400 text-xs font-mono tracking-wider uppercase transition cursor-pointer select-none shrink-0"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          <span>Clear History</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

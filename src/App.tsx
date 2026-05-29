@@ -56,7 +56,8 @@ function DashboardShell() {
     signInWithGoogle, 
     logout,
     authError,
-    clearAuthError
+    clearAuthError,
+    toasts
   } = useDashboard();
 
   // Experience calculations
@@ -268,6 +269,34 @@ function DashboardShell() {
           </div>
         </div>
       )}
+
+      {/* Dynamic Toast Notifications */}
+      <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-center gap-3 p-4 rounded-2xl shadow-2xl border backdrop-blur-md transition-all duration-300 animate-slideUp font-sans ${
+              toast.type === 'success'
+                ? 'bg-emerald-950/95 border-emerald-500/20 text-emerald-200'
+                : toast.type === 'error'
+                ? 'bg-rose-950/95 border-rose-500/20 text-rose-200'
+                : toast.type === 'warning'
+                ? 'bg-amber-950/95 border-amber-500/20 text-amber-200'
+                : 'bg-slate-900 border-indigo-500/20 text-indigo-200'
+            }`}
+          >
+            <div className="shrink-0 text-lg bg-white/10 w-6 h-6 rounded-lg flex items-center justify-center">
+              {toast.type === 'success' && '🎯'}
+              {toast.type === 'error' && '❌'}
+              {toast.type === 'warning' && '⏰'}
+              {toast.type === 'info' && '✨'}
+            </div>
+            <div className="flex-1 text-xs font-semibold leading-relaxed">
+              {toast.message}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

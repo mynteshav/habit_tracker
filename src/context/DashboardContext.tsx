@@ -33,6 +33,12 @@ import {
   AchievementBadge 
 } from '../types';
 
+export interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+}
+
 interface DashboardContextType {
   user: FirebaseUser | null;
   authLoading: boolean;
@@ -84,6 +90,9 @@ interface DashboardContextType {
   resetTimer: () => void;
   pomodorosCount: number;
   setPomodorosCount: Dispatch<SetStateAction<number>>;
+  toasts: Toast[];
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+  checkExpiredTopics: () => Promise<void>;
 }
 
 const defaultBadges: AchievementBadge[] = [
@@ -111,6 +120,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    const id = crypto.randomUUID();
+    const newToast: Toast = { id, message, type };
+    setToasts(prev => [...prev, newToast]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
 
   // States initialized from local storage as local offline caches
   const [topics, setTopicsState] = useState<Topic[]>(() => {
@@ -510,12 +529,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'topics', id), topicDoc);
         await addXp(20);
+        showToast("✨ Topic added successfully!", "success");
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, path);
       }
     } else {
       setTopicsState(prev => [...prev, topicDoc]);
       addXp(20);
+      showToast("✨ Topic added successfully!", "success");
     }
   };
 
@@ -541,11 +562,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const path = `users/${user.uid}/topics/${id}`;
       try {
         await deleteDoc(doc(db, 'users', user.uid, 'topics', id));
+        showToast("🗑️ Topic deleted successfully.", "info");
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, path);
       }
     } else {
       setTopicsState(prev => prev.filter(t => t.id !== id));
+      showToast("🗑️ Topic deleted successfully.", "info");
     }
   };
 
@@ -560,6 +583,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         if (isCompleting) {
           await addXp(50);
           await triggerBadgeUnlock('first_topic');
+          showToast("🎯 Study topic completed! Awesome progress!", "success");
+        } else {
+          showToast("📝 Topic set back to active status.", "info");
         }
         await setDoc(doc(db, 'users', user.uid, 'topics', id), { ...target, completed: isCompleting });
       } catch (err) {
@@ -569,6 +595,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       if (isCompleting) {
         addXp(50);
         triggerBadgeUnlock('first_topic');
+        showToast("🎯 Study topic completed! Awesome progress!", "success");
+      } else {
+        showToast("📝 Topic set back to active status.", "info");
       }
       setTopicsState(prev => prev.map(t => t.id === id ? { ...t, completed: isCompleting } : t));
     }
@@ -592,6 +621,75 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setTopicsState(updated);
     }
   };
+
+  const checkExpiredTopics = async () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+
+    // Find all expired topics
+    const expired = topics.filter(t => !t.completed && t.deadline && t.deadline < todayStr);
+    
+    if (expired.length === 0) return;
+
+    // Check if auto-delete is enabled
+    const autoDeleteStr = localStorage.getItem('auto_delete_expired_topics') || 'false';
+    const autoDelete = autoDeleteStr === 'true';
+
+    if (autoDelete) {
+      for (const topic of expired) {
+        await deleteTopic(topic.id);
+      }
+      showToast(`🗑️ ${expired.length} expired topic${expired.length > 1 ? 's' : ''} auto-deleted.`, 'info');
+    } else {
+      const notifiedStr = localStorage.getItem('notified_expired_topics') || '[]';
+      let notifiedIds: string[] = [];
+      try {
+        notifiedIds = JSON.parse(notifiedStr);
+      } catch (e) {
+        notifiedIds = [];
+      }
+
+      const newlyExpired = expired.filter(t => !notifiedIds.includes(t.id));
+
+      if (newlyExpired.length > 0) {
+        showToast(`⚠️ ${newlyExpired.length} study topic${newlyExpired.length > 1 ? 's have' : ' has'} expired!`, 'warning');
+        const nextNotified = Array.from(new Set([...notifiedIds, ...newlyExpired.map(t => t.id)]));
+        localStorage.setItem('notified_expired_topics', JSON.stringify(nextNotified));
+      }
+    }
+  };
+
+  // Run when the app loads
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkExpiredTopics();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Run at midnight each day (check every minute if calendar date shifts)
+  useEffect(() => {
+    const getTodayString = () => {
+      const date = new Date();
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    };
+    
+    let lastCheckedDate = getTodayString();
+    
+    const interval = setInterval(() => {
+      const currentDateString = getTodayString();
+      if (currentDateString !== lastCheckedDate) {
+        lastCheckedDate = currentDateString;
+        console.log("Midnight shift identified! Re-evaluating study loops expiration state...");
+        checkExpiredTopics();
+      }
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [topics]);
 
   // --- 2. Coding Problem Mutations ---
   const addProblem = async (prob: Omit<CodingProblem, 'id' | 'solvedAt'>) => {
@@ -1306,7 +1404,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       pauseTimer,
       resetTimer,
       pomodorosCount,
-      setPomodorosCount
+      setPomodorosCount,
+      toasts,
+      showToast,
+      checkExpiredTopics
     }}>
       {children}
     </DashboardContext.Provider>
